@@ -123,13 +123,13 @@ The project includes a **Makefile** for easy execution of common tasks.
 | `make clean`          | Remove node_modules, dist files, and clean up containers       |
 | `make kill-container` | Stop and remove backend-related containers                     |
 
-# System Architecture
+## System Architecture
 
 This section outlines the architecture of the **Food Craver System**, including its overall flow, the scraping process, and backend processing.
 
 ---
 
-## 1️⃣ High-Level Flow (Abstract Overview)
+### 1️⃣ High-Level Flow (Abstract Overview)
 
 The following diagram provides a **simplified high-level overview** of the scraper system's workflow.
 
@@ -148,7 +148,7 @@ flowchart TD
     Backend -->|Return results| User
 ```
 
-### Description
+#### Description
 
 - **User submits a scraping request** via `POST /scrape`.
 - **Backend sends the URLs to RabbitMQ**, which queues them as **page jobs** (`scraper.page`).
@@ -160,7 +160,7 @@ flowchart TD
 
 ---
 
-## 2️⃣ Scraper Process (Handling Pages & Subpages)
+### 2️⃣ Scraper Process (Handling Pages & Subpages)
 
 This sequence diagram details the **scraper process**, including caching, page rendering, subpage discovery, and result submission.
 
@@ -184,7 +184,7 @@ sequenceDiagram
     end
 ```
 
-### Description
+#### Description
 
 1. **Scraper listens for new jobs** from `scraper.page` or `scraper.subpage`.
 2. **Checks Redis cache** to see if the URL has already been crawled.
@@ -197,7 +197,7 @@ sequenceDiagram
 
 ---
 
-## 3️⃣ Backend Processing (Extract, Store, Persist)
+### 3️⃣ Backend Processing (Extract, Store, Persist)
 
 This sequence diagram shows how the backend **processes scraper results**, analyzes content, extracts relevant data, and persists information.
 
@@ -222,7 +222,7 @@ sequenceDiagram
     end
 ```
 
-### Description
+#### Description
 
 1. **Backend listens for results** from `scraper.results`.
 2. **Analyzer determines the content type**:
