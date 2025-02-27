@@ -7,7 +7,7 @@
 3. [Local Development Setup](#-local-development-setup)
 4. [Local Production Setup](#-local-production-setup)
 5. [Makefile Commands](#-makefile-commands)
-6. [System Architecture](#-system-architecture)
+6. [System Architecture](#system-architecture)
    - [High-Level Flow](#-high-level-flow-abstract-overview)
    - [Scraper Process](#-scraper-process-handling-pages--subpages)
    - [Backend Processing](#-backend-processing-extract-store-persist)
@@ -129,7 +129,7 @@ This section outlines the architecture of the **Food Craver System**, including 
 
 ---
 
-### 1️⃣ High-Level Flow (Abstract Overview)
+### High-Level Flow (Abstract Overview)
 
 The following diagram provides a **simplified high-level overview** of the scraper system's workflow.
 
@@ -160,7 +160,7 @@ flowchart TD
 
 ---
 
-### 2️⃣ Scraper Process (Handling Pages & Subpages)
+### Scraper Process (Handling Pages & Subpages)
 
 This sequence diagram details the **scraper process**, including caching, page rendering, subpage discovery, and result submission.
 
@@ -197,7 +197,7 @@ sequenceDiagram
 
 ---
 
-### 3️⃣ Backend Processing (Extract, Store, Persist)
+### Backend Processing (Extract, Store, Persist)
 
 This sequence diagram shows how the backend **processes scraper results**, analyzes content, extracts relevant data, and persists information.
 
