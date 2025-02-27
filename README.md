@@ -8,9 +8,9 @@
 4. [Local Production Setup](#-local-production-setup)
 5. [Makefile Commands](#-makefile-commands)
 6. [System Architecture](#system-architecture)
-   - [High-Level Flow](#-high-level-flow-abstract-overview)
-   - [Scraper Process](#-scraper-process-handling-pages--subpages)
-   - [Backend Processing](#-backend-processing-extract-store-persist)
+   - [High-Level Flow](#high-level-flow-abstract-overview)
+   - [Scraper Process](#scraper-process-handling-pages--subpages)
+   - [Backend Processing](#backend-processing-extract-store-persist)
 
 This project is **Food-Craver**, a web scraping system built using **NestJS**, **Puppeteer, RabbitMQ, Redis, and PostgreSQL** to extract and process menu data from various websites.
 
