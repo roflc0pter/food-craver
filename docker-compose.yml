@@ -1,0 +1,133 @@
+services:
+  backend:
+    image: $BACKEND_IMAGE
+    build: 
+      context: ./packages/backend
+      dockerfile: Dockerfile
+
+    volumes:
+      - files:/app/uploads
+    ports:
+      - "$BACKEND_PORT:3000"
+    networks:
+      - food-craver
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  scraper-pages:
+    image: $SCRAPER_IMAGE
+    build: 
+      context: ./packages/scraper
+      dockerfile: Dockerfile
+    networks:
+      - food-craver
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+  
+  scraper-subpages:
+    image: $SCRAPER_IMAGE
+    build: 
+      context: ./packages/scraper
+      dockerfile: Dockerfile
+    networks:
+      - food-craver
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  message-broker:
+    image: $BROKER_IMAGE
+    build: 
+      context: ./packages/message-broker
+      dockerfile: Dockerfile
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "$BROKER_AMQP_PORT:5672"
+      - "$BROKER_UI_PORT:15672"
+    networks:
+      - food-craver
+    environment:
+      RABBITMQ_DEFAULT_USER: ${BROKER_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${BROKER_PASSWORD:-password}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  database:
+    image: $DB_IMAGE
+    build: 
+      context: ./packages/database
+      dockerfile: Dockerfile
+    ports:
+      - "$DB_PORT:5432"
+    networks:
+      - food-craver
+    volumes:
+      - db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: $DB_NAME
+      POSTGRES_USER: $DB_USER
+      POSTGRES_PASSWORD: $DB_PASSWORD
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+      
+  cache:
+    image: $CACHE_IMAGE
+    build: 
+      context: ./packages/cache
+      dockerfile: Dockerfile
+    networks:
+      - food-craver
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+
+networks:
+  food-craver:
+    name: food-craver
+
+volumes:
+  files:
+  db:
+  rabbitmq_data:
