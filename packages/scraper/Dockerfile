@@ -7,6 +7,7 @@ WORKDIR /app
 FROM base AS deps
 WORKDIR /app
 
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
@@ -25,6 +26,18 @@ FROM node:22.14.0-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+RUN apk add --no-cache \
+  chromium \
+  udev \
+  nss \
+  freetype \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont \
+  bash
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 COPY --from=builder /app/dist ./dist
 COPY --from=deps /app/node_modules ./node_modules

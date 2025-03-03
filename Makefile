@@ -25,7 +25,7 @@ build-images:
 	cd $(CACHE_DIR) && docker build -t $(CACHE_IMAGE) .
 
 
-dev: dev-backend dev-scraper dev-container
+start-dev: dev-backend dev-scraper dev-container
 
 dev-backend:
 	cd $(BACKEND_DIR) && yarn start:dev
