@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Browser, Page } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
@@ -7,6 +8,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 export class BrowserService implements OnModuleDestroy {
   private browser: Browser | null = null;
   private readonly logger = new Logger(BrowserService.name);
+  constructor(private readonly configService: ConfigService) {}
 
   async launchBrowser(): Promise<Browser> {
     if (this.browser) {
@@ -16,6 +18,7 @@ export class BrowserService implements OnModuleDestroy {
     puppeteer.use(StealthPlugin());
     this.browser = await puppeteer.launch({
       headless: true,
+      executablePath: this.configService.get('PUPPETEER_EXECUTABLE_PATH'),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -27,7 +30,7 @@ export class BrowserService implements OnModuleDestroy {
     return this.browser;
   }
 
-  async closeBrowser() {
+  async close() {
     if (!this.browser) {
       return;
     }
@@ -40,9 +43,11 @@ export class BrowserService implements OnModuleDestroy {
     }
   }
 
-  async newPage() {
-    const browser = await this.launchBrowser();
-    const page = await browser.newPage();
+  async page() {
+    if (!this.browser) {
+      throw new Error('Initialize browser before calling newPage');
+    }
+    const page = await this.browser.newPage();
     await this.setRandomUserAgent(page);
     return page;
   }
@@ -59,12 +64,13 @@ export class BrowserService implements OnModuleDestroy {
   }
 
   async goto(url: string, pageInstance?: Page) {
+    const page = pageInstance ? pageInstance : await this.page();
     try {
-      const page = pageInstance ? pageInstance : await this.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded' });
     } catch (e) {
       this.logger.error(`Error navigating to ${url}:`, e);
     }
+    return page;
   }
 
   async waitForPageLoad(page: Page) {
@@ -86,7 +92,20 @@ export class BrowserService implements OnModuleDestroy {
     }
   }
 
+  async takeScreenshot(page: Page) {
+    try {
+      const url = page.url();
+      const sanitizedUrl = url.replace(/[^a-zA-Z0-9]/g, '_');
+      const filePath = `${sanitizedUrl}.png`;
+
+      this.logger.debug(`Taking screenshot and saving to ${filePath}`);
+      await page.screenshot({ path: filePath, fullPage: true });
+    } catch (e) {
+      this.logger.error('Error taking screenshot:', e);
+    }
+  }
+
   async onModuleDestroy() {
-    await this.closeBrowser();
+    await this.close();
   }
 }
