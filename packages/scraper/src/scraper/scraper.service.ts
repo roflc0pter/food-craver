@@ -8,6 +8,7 @@ import {
 import { Cache } from 'cache-manager';
 import { Page } from 'puppeteer';
 import { BrowserService } from 'src/browser/browser.service';
+import { FileExtractorService } from './file-extractor.service';
 import { HtmlExtractorService } from './html-extractor.service';
 import { LinkExtractorService } from './link-extractor.service';
 import {
@@ -25,6 +26,7 @@ export class ScraperService {
     private readonly browserService: BrowserService,
     private readonly htmlExtractor: HtmlExtractorService,
     private readonly linkExtractor: LinkExtractorService,
+    private readonly fileExtractor: FileExtractorService,
     private readonly configService: ConfigService,
     @Inject('CACHE_MANAGER') private readonly cacheManager: Cache,
   ) {
@@ -103,21 +105,20 @@ export class ScraperService {
   ): Promise<ScrapingResultDto | null> {
     switch (method) {
       case 'apiExtractor':
-        return this.handleApiExtraction(page, payload, resource);
+        return this.handleApiExtraction(payload);
       case 'htmlExtractor':
         return this.handleHtmlExtraction(page, payload, resource);
       case 'fileExtractor':
-        return this.handleFileExtraction(page, payload, resource);
+        return this.handleFileExtraction(page, payload);
       default:
         return null;
     }
   }
 
-  private async handleApiExtraction(
-    page: Page,
+  private handleApiExtraction(
     payload: ScraperJobDto,
-    resource?: string,
-  ): Promise<ScrapingResultDto | null> {
+  ): ScrapingResultDto | null {
+    this.logger.debug(`Attempting api extraction for ${payload.url}`);
     return null;
   }
 
@@ -126,6 +127,7 @@ export class ScraperService {
     payload: ScraperJobDto,
     resource?: string,
   ): Promise<ScrapingResultDto | null> {
+    this.logger.debug(`Attempting html extraction for ${payload.url}`);
     const hostname = new URL(payload.url).hostname;
     const selector = resource || (await this.htmlExtractor.getSelector(page));
 
@@ -134,21 +136,39 @@ export class ScraperService {
       return null;
     }
     this.logger.debug(`HTML selector found. ${payload.url}`);
+
     const data = await this.htmlExtractor.extractData(page, selector);
+
     await this.cacheManager.set(`scraper:${hostname}`, {
       method: 'htmlExtractor',
       resource: selector,
     });
-    this.logger.debug(`Extracted HTML data. ${payload.url}`);
+    this.logger.debug(`HTML data extracted. ${payload.url}`);
     return { method: 'htmlExtractor', data };
   }
 
   private async handleFileExtraction(
     page: Page,
     payload: ScraperJobDto,
-    resource?: string,
   ): Promise<ScrapingResultDto | null> {
-    return null;
+    this.logger.debug(`Attempting file extraction for ${payload.url}`);
+
+    const fileResponses = await this.fileExtractor.extractFiles(page);
+
+    if (!fileResponses) {
+      this.logger.debug(`No files found. ${payload.url}`);
+      return null;
+    }
+    this.logger.debug(`File extraction successful for ${payload.url}`);
+
+    await this.fileExtractor.saveFiles();
+    const savedFileNames = this.fileExtractor.getSavedFileNames();
+
+    await this.cacheManager.set(`scraper:${payload.url}`, {
+      method: 'fileExtractor',
+    });
+
+    return { method: 'fileExtractor', data: savedFileNames };
   }
 
   private async handleExtractedLinks(page: Page, payload: ScraperJobDto) {
