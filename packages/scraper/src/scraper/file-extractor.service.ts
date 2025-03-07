@@ -115,24 +115,25 @@ export class FileExtractorService {
   }
 
   private async extractDomFileLinks(page: Page): Promise<void> {
-    const rawLinks = await page.evaluate(() => {
-      const elements = Array.from(
-        document.querySelectorAll(
-          'a[href], img[src], source[src], object[data], embed[src]',
-        ),
-      );
-      return elements
-        .map(
-          (el) =>
-            el.getAttribute('href') ||
-            el.getAttribute('src') ||
-            el.getAttribute('data'),
-        )
-        .filter(
-          (src): src is string => !!src && /\.(png|jpe?g|pdf)$/i.test(src),
+    this.rawLinks = await page.evaluate(() => {
+      const links: string[] = [];
+      document.querySelectorAll('img[data-uro-original]').forEach((img) => {
+        const url = img.getAttribute('data-uro-original');
+        if (url) {
+          links.push(url);
+        }
+      });
+      document.querySelectorAll('picture source[srcset]').forEach((source) => {
+        const srcset = source.getAttribute('srcset');
+        if (srcset) links.push(srcset.split(',')[0].trim().split(' ')[0]);
+      });
+      return links.concat(
+        performance
+          .getEntriesByType('resource')
+          .map((entry) => entry.name)
+          .filter((src) => src && /\.(png|jpe?g|pdf)$/i.test(src)),
         );
     });
-    this.rawLinks = rawLinks;
   }
 
   private containsMenuKeywords(fileUrl: URL): boolean {
