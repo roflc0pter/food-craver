@@ -66,7 +66,7 @@ export class BrowserService implements OnModuleDestroy {
   async goto(url: string, pageInstance?: Page) {
     const page = pageInstance ? pageInstance : await this.page();
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.goto(url, { waitUntil: ['load', 'networkidle0'] });
     } catch (e) {
       this.logger.error(`Error navigating to ${url}:`, e);
     }
