@@ -1,38 +1,49 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { SequelizeModule } from '@nestjs/sequelize';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { JobModule } from './job/job.module';
+import { RestaurantModule } from './restaurant/restaurant.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ClientsModule.registerAsync([
-      {
-        name: 'RABBITMQ_SERVICE',
-        imports: [ConfigModule],
-        inject: [ConfigService],
-        useFactory: (configService: ConfigService) => {
-          const host = configService.getOrThrow<string>('RABBITMQ_HOST');
-          const port = configService.getOrThrow<string>('RABBITMQ_PORT');
-          const user = configService.getOrThrow<string>('RABBITMQ_USER');
-          const pw = configService.getOrThrow<string>('RABBITMQ_PW');
-          const queue = configService.getOrThrow<string>('RABBITMQ_QUEUE');
-          return {
-            transport: Transport.RMQ,
-            options: {
-              urls: [`amqp://${user}:${pw}@${host}:${port}`],
-              queue,
-              queueOptions: { durable: true },
-            },
-          };
+    ServeStaticModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => [
+        {
+          rootPath: configService.getOrThrow('UPLOADS_MOUNT_DIR'),
+          serveRoot: '/uploads',
+          exclude: ['/api/(.*)'],
         },
-      },
-    ]),
+      ],
+    }),
+    SequelizeModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        dialect: 'postgres',
+        host: configService.getOrThrow<string>('DB_HOST'),
+        port: +configService.getOrThrow<string>('DB_PORT'),
+        username: configService.getOrThrow<string>('DB_USER'),
+        password: configService.getOrThrow<string>('DB_PASSWORD'),
+        database: configService.getOrThrow<string>('DB_NAME'),
+        autoLoadModels: true,
+        synchronize: true,
+        define: {
+          timestamps: true,
+          underscored: true,
+          paranoid: true,
+        },
+        logging: (msg) => {
+          Logger.debug(msg);
+        },
+      }),
+      inject: [ConfigService],
+    }),
+    RestaurantModule,
+    JobModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
