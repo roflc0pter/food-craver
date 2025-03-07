@@ -1,0 +1,154 @@
+services:
+  backend:
+    image: $BACKEND_IMAGE
+    build: 
+      context: ./packages/backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./packages/backend:/app
+      - ./packages/backend/node_modules:/app/node_modules
+      - files:$UPLOADS_MOUNT_DIR
+    ports:
+      - "$BACKEND_EX_PORT:3000"
+    networks:
+      - food-craver
+    environment:
+      - NODE_ENV=development
+      - UPLOADS_MOUNT_DIR=$UPLOADS_MOUNT_DIR
+      - DB_HOST=$DB_HOST
+      - DB_PORT=$DB_PORT
+      - DB_NAME=$DB_NAME
+      - DB_USER=$DB_USER
+      - DB_PASSWORD=$DB_PASSWORD
+      - RABBITMQ_HOST=message-broker
+      - RABBITMQ_PORT=$BROKER_AMQP_PORT
+      - RABBITMQ_USER=$BROKER_USER
+      - RABBITMQ_PW=$BROKER_PASSWORD
+      - RABBITMQ_QUEUE=backend.page.queue
+    command: ["yarn", "start:dev"]
+    restart: always
+
+  scraper-pages:
+    image: $SCRAPER_IMAGE
+    build: 
+      context: ./packages/scraper
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./packages/scraper:/app
+      - /app/node_modules
+      - files:$UPLOADS_MOUNT_DIR
+    networks:
+      - food-craver
+    environment:
+      - NODE_ENV=development
+      - UPLOADS_MOUNT_DIR=$UPLOADS_MOUNT_DIR
+      - RABBITMQ_HOST=message-broker
+      - RABBITMQ_PORT=$BROKER_AMQP_PORT
+      - RABBITMQ_USER=$BROKER_USER
+      - RABBITMQ_PW=$BROKER_PASSWORD
+      - RABBITMQ_QUEUE=backend.page.queue
+      - REDIS_HOST=$REDIS_HOST
+      - REDIS_PORT=$CACHE_PORT
+    command: ["yarn", "start:dev"]
+    restart: always
+  
+  scraper-subpages:
+    image: $SCRAPER_IMAGE
+    build: 
+      context: ./packages/scraper
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./packages/scraper:/app
+      - /app/node_modules
+      - files:$UPLOADS_MOUNT_DIR
+    networks:
+      - food-craver
+    environment:
+      - NODE_ENV=development
+      - UPLOADS_MOUNT_DIR=$UPLOADS_MOUNT_DIR
+      - RABBITMQ_HOST=message-broker
+      - RABBITMQ_PORT=$BROKER_AMQP_PORT
+      - RABBITMQ_USER=$BROKER_USER
+      - RABBITMQ_PW=$BROKER_PASSWORD
+      - RABBITMQ_QUEUE=scraper.page.queue
+      - REDIS_HOST=$REDIS_HOST
+      - REDIS_PORT=$CACHE_PORT
+    command: ["yarn", "start:dev"]
+    restart: always
+
+  message-broker:
+    image: $BROKER_IMAGE
+    build: 
+      context: ./packages/message-broker
+      dockerfile: Dockerfile
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "$BROKER_AMQP_EX_PORT:$BROKER_AMQP_PORT"
+      - "$BROKER_UI_EX_PORT:$BROKER_UI_PORT"
+    networks:
+      - food-craver
+    environment:
+      RABBITMQ_DEFAULT_USER: ${BROKER_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${BROKER_PASSWORD:-password}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  database:
+    image: $DB_IMAGE
+    build: 
+      context: ./packages/database
+      dockerfile: Dockerfile
+    ports:
+      - "$DB_EX_PORT:$DB_PORT"
+    networks:
+      - food-craver
+    volumes:
+      - db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: $DB_NAME
+      POSTGRES_USER: $DB_USER
+      POSTGRES_PASSWORD: $DB_PASSWORD
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+      
+  cache:
+    image: $CACHE_IMAGE
+    build: 
+      context: ./packages/cache
+      dockerfile: Dockerfile
+    networks:
+      - food-craver
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+
+networks:
+  food-craver:
+    name: food-craver
+
+volumes:
+  files:
+  db:
+  rabbitmq_data:
