@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import path from 'path';
 import { HTTPResponse, Page } from 'puppeteer';
 import { saveFile } from 'src/lib/save-file';
 
 @Injectable()
 export class FileExtractorService {
+  private readonly logger = new Logger(FileExtractorService.name);
+  private readonly UPLOAD_DIR: string;
   private readonly MIN_FILE_SIZE = 30 * 1024; // Minimum file size (30KB) to avoid small images like icons or logos
   private readonly PAGE_RENDER_TIMEOUT = 10000;
   private readonly IGNORED_DOMAINS = new Set([
@@ -28,10 +31,18 @@ export class FileExtractorService {
   ];
 
   private rawLinks: string[] | null;
-  private fileResponses: Map<URL, HTTPResponse> = new Map();
+  private fileResponses: Map<string, { url: URL; response: HTTPResponse }> =
+    new Map();
   private savedFileNames: string[] = [];
 
-  async extractFiles(page: Page): Promise<Map<URL, HTTPResponse> | null> {
+  constructor(private readonly configService: ConfigService) {
+    this.UPLOAD_DIR =
+      this.configService.getOrThrow<string>('UPLOADS_MOUNT_DIR');
+  }
+
+  async extractFiles(
+    page: Page,
+  ): Promise<Map<string, { url: URL; response: HTTPResponse }> | null> {
     await this.waitForPageRender(page);
     await this.extractDomFileLinks(page);
     await this.setPotentialFiles(page);
@@ -42,22 +53,23 @@ export class FileExtractorService {
   }
 
   async saveFiles(): Promise<void> {
-    for (const fileUrl of Array.from(this.fileResponses.keys())) {
+    for (const { url: fileUrl } of Array.from(this.fileResponses.values())) {
       try {
-        const response = this.fileResponses.get(fileUrl);
+        const { response } = this.fileResponses.get(fileUrl.href) || {};
         if (!response) {
           continue;
         }
 
         const fileName = path.basename(fileUrl.pathname);
-        const filePath = path.join('uploads', fileUrl.hostname);
-        const fullPath = path.join(filePath, fileName);
+        const filePath = path.join(fileUrl.hostname, fileName);
+        const fullPath = path.join(this.UPLOAD_DIR, filePath);
         const buffer = await response.buffer();
+
         saveFile(fullPath, buffer);
-        this.savedFileNames.push(fullPath);
-        console.log(`File saved successfully: ${fullPath}`);
+        this.savedFileNames.push(filePath);
+        this.logger.debug(`File saved successfully: ${fullPath}`);
       } catch (error) {
-        console.error(`Failed to save file:`, error);
+        this.logger.error(`Failed to save file:`, error);
       }
     }
   }
@@ -142,7 +154,7 @@ export class FileExtractorService {
           .getEntriesByType('resource')
           .map((entry) => entry.name)
           .filter((src) => src && /\.(png|jpe?g|pdf)$/i.test(src)),
-        );
+      );
     });
   }
 
@@ -174,13 +186,13 @@ export class FileExtractorService {
         !response ||
         !response.headers()['content-type']?.startsWith('image/')
       ) {
-        console.log(`Skipping non-image response file: ${fileUrl}`);
+        this.logger.log(`Skipping non-image response file: ${fileUrl}`);
         return false;
       }
       const buffer = await response.buffer();
       const size = buffer.length;
       if (size < this.MIN_FILE_SIZE) {
-        console.log(`Skipping small file: ${fileUrl}`);
+        this.logger.log(`Skipping small file: ${fileUrl}`);
         return false;
       }
 
