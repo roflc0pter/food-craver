@@ -2,44 +2,44 @@
 
 ## Table of Contents
 
-1. [Features](#-features)
-2. [Prerequisites](#-prerequisites)
-3. [Local Development Setup](#-local-development-setup)
-4. [Local Production Setup](#-local-production-setup)
-5. [Makefile Commands](#-makefile-commands)
-6. [System Architecture](#system-architecture)
-   - [High-Level Flow](#high-level-flow-abstract-overview)
-   - [Scraper Process](#scraper-process-handling-pages--subpages)
-   - [Backend Processing](#backend-processing-extract-store-persist)
+1. [Features](#features)
+2. [Prerequisites](#prerequisites)
+3. [Local Production Setup](#local-production-setup)
+4. [Local Development Setup](#local-development-setup)
+5. [System Architecture](#system-architecture)
+   - [High-Level Flow](#high-level-flow)
+   - [Scraper Process](#scraper-process)
+   - [Backend Processing](#backend-processing)
 
-This project is **Food-Craver**, a web scraping system built using **NestJS**, **Puppeteer, RabbitMQ, Redis, and PostgreSQL** to extract and process menu data from various websites.
+## Overview
 
-## 🚀 Features
+Food-Craver is a **scalable application** consisting of **scrapers, a backend with a REST API, RabbitMQ as a message broker, Redis as a caching layer, and PostgreSQL as the primary database**.
+
+The system extracts menu data from URLs by searching for potential **PDFs, images, and HTML structures**. The scraping pipeline is designed to be **flexible and expandable**, allowing modifications and new extraction strategies to be incorporated as needed.
+
+The **HTML scraper** operates using a **bottom-up approach**, searching for keywords, identifying matching selectors, and then extracting all menu options dynamically. Additionally, it detects further links related to menus and triggers **new scraping jobs** to ensure comprehensive coverage.
+
+## Features
 
 - **Distributed Web Scraping** with **RabbitMQ** for job distribution
 - **Headless Browser Automation** using **Puppeteer**
+- **Intelligent Content Extraction** supporting **HTML, PDFs, and Images**
 - **Caching Layer** with **Redis** to prevent redundant crawling
 - **Database Persistence** with **PostgreSQL**
-- **Built with NestJS** for scalable and maintainable backend logic
 - **Scalable Architecture** with Docker Compose and Microservices
+- **Dynamic Page Handling**: Expands scraping coverage by detecting new pages
 
----
+## API Documentation
 
-## 📌 Prerequisites
+Swagger documentation is available at: http://localhost:3000/api
 
-For local **development**, ensure you have the following installed:
+## Prerequisites
 
-- [Docker](https://www.docker.com/get-started)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-- [Make](https://www.gnu.org/software/make/)
-- [Yarn](https://yarnpkg.com/)
-- Node.js (16+ recommended)
+### Environment Variables
 
-For simply running the **production environment**, only Docker and Docker Compose are required.
+Ensure a `.env` file is created in the root directory with the following example variables:
 
-Additionally, create a `.env` file in the root directory with the following example variables:
-
-```ini
+```env
 UPLOADS_MOUNT_DIR=/app/uploads
 
 BACKEND_IMAGE=food-craver-backend
@@ -49,7 +49,6 @@ BACKEND_EX_PORT=3000
 SCRAPER_IMAGE=food-craver-scraper
 SCRAPER_DIR=packages/scraper
 SCRAPER_PAGE_INSTANCE_QUEUES=page
-SCRAPER_SUBPAGE_INSTANCE_QUEUES=page,subpage
 SCRAPER_SUBPAGE_INSTANCE_QUEUES=page,subpage
 SCRAPER_BROKER_URL=amqp://message-broker:5672
 SCRAPER_QUEUE=scraper.page
@@ -79,23 +78,16 @@ CACHE_PORT=6379
 CACHE_EX_PORT=6379
 ```
 
----
+For local **development**, ensure you have the following installed:
 
-## 🔧 Local Development Setup
+- Docker
+- Docker Compose
+- Yarn
+- Node.js (16+ recommended)
 
-To run the project in **development mode**, follow these steps:
+For simply running the **production environment**, only Docker and Docker Compose are required.
 
-```sh
-make install      # Install all dependencies
-make build        # Build the TypeScript project
-make dev          # Start the backend, scraper, and necessary containers in development mode
-```
-
-This will start the services and allow you to make live changes without restarting the application.
-
----
-
-## 🚀 Local Production Setup
+## Run in production mode
 
 To run the project in **production mode**, use **Docker Compose**:
 
@@ -103,144 +95,76 @@ To run the project in **production mode**, use **Docker Compose**:
 docker-compose up
 ```
 
-This will:
+## Local Development Setup
 
-- Build and start **all services** in detached mode (`-d`).
-- Use Docker for **RabbitMQ, Redis, PostgreSQL, Scraper, and Backend**.
-- Persist database and caching volumes.
-
-To stop the services:
+To run the project in **development mode**, follow these steps:
 
 ```sh
-docker-compose down
+docker compose --file ./docker-compose.dev.yml up
 ```
 
-To view logs:
-
-```sh
-docker-compose logs -f
-```
-
----
-
-## 📜 Makefile Commands
-
-The project includes a **Makefile** for easy execution of common tasks.
-
-| Command               | Description                                                    |
-| --------------------- | -------------------------------------------------------------- |
-| `make install`        | Installs npm dependencies                                      |
-| `make build`          | Build the TypeScript projects and docker images                |
-| `make dev`            | Start the backend, scraper, and containers in development mode |
-| `make reset`          | Clean, reinstall dependencies, and rebuild the project         |
-| `make clean`          | Remove node_modules, dist files, and clean up containers       |
-| `make kill-container` | Stop and remove backend-related containers                     |
+Start the backend, scraper, and necessary containers in development mode.
 
 ## System Architecture
 
 This section outlines the architecture of the **Food Craver System**, including its overall flow, the scraping process, and backend processing.
 
----
-
-### High-Level Flow (Abstract Overview)
-
-The following diagram provides a **simplified high-level overview** of the scraper system's workflow.
+### High-Level Flow
 
 ```mermaid
 flowchart TD
-    User["User submits URLs"] -->|POST /scrape| Backend
-    Backend -->|Send job event| RabbitMQ["Message Broker"]
-    RabbitMQ -->|Distribute page jobs| Scraper["Scraper Services"]
-
-    Scraper -->|Fetch page, extract subpages| RabbitMQ["Message Broker"]
-    RabbitMQ -->|Create subpage jobs| Scraper
-    Scraper -->|Send final HTML content| RabbitMQ["Message Broker"]
-
-    RabbitMQ -->|Send results| Backend
-    Backend -->|Process, extract, persist| Database["Database & Filesystem"]
-    Backend -->|Return results| User
+    UserRequest[User Request] -->|POST /jobs| Backend[Backend]
+    Backend -->|Create Restaurant & Job in DB| Database[Database]
+    Backend -->|Emit 'page.added'| RabbitMQ[Message Broker]
+    RabbitMQ -->|Send Scraping Job| Scraper[Scraper]
+    Scraper -->|Extract Data HTML, PDF, Images| Scraper
+    Scraper -->|Check for additional links| Scraper
+    Scraper -->|Cache links| Redis[Cache]
+    Scraper -->|Emit new scraping jobs| RabbitMQ
+    Scraper -->|Emit 'processed'| RabbitMQ
+    Backend -->|Store processed data in DB| Database
+    UserRequest -->|GET /data| Backend
 ```
 
-#### Description
-
-- **User submits a scraping request** via `POST /scrape`.
-- **Backend sends the URLs to RabbitMQ**, which queues them as **page jobs** (`scraper.page`).
-- **Scrapers retrieve jobs and process them**, rendering content and extracting subpages.
-- **Discovered subpages are added as subpage jobs** (`scraper.subpage`), allowing other scrapers to process them.
-- **Once scraping is complete, results are sent back to RabbitMQ** (`scraper.results`).
-- **Backend processes the results**, extracts relevant data, and stores it in the **database or filesystem**.
-- Finally, **the extracted data is returned to the user**.
-
----
-
-### Scraper Process (Handling Pages & Subpages)
-
-This sequence diagram details the **scraper process**, including caching, page rendering, subpage discovery, and result submission.
+### Scraper Process
 
 ```mermaid
 sequenceDiagram
     participant RabbitMQ
     participant Scraper
-    participant Redis
     participant Website
+    participant Redis
 
-    RabbitMQ->>Scraper: Receive `scraper.page` or `scraper.subpage` job
-    Scraper->>Redis: Check if URL is cached
-    alt URL is cached
-        Scraper->>RabbitMQ: Skip and acknowledge job
-    else URL is not cached
-        Scraper->>Website: Fetch page & render JavaScript
-        Scraper->>Scraper: Extract all subpages
-        Scraper->>RabbitMQ: Publish new `scraper.subpage` jobs
-        Scraper->>Redis: Cache page content
-        Scraper->>RabbitMQ: Send final HTML result to `scraper.results`
+    RabbitMQ->>Scraper: Receive "scraper.page" job
+    Scraper->>Redis: Cache URL to prevent reprocessing
+    Scraper->>Redis: Check if URL is already processed
+    alt URL already processed
+        Scraper->>RabbitMQ: Acknowledge job, no action needed
+    else URL is new
+        Scraper->>Website: Fetch page & execute necessary interactions
+        Scraper->>Scraper: Extract data (HTML, PDF, Images)
+        Scraper->>RabbitMQ: Emit extracted data
+        Scraper->>Scraper: Extract additional page links
+        Scraper->>RabbitMQ: Emit "page.added" in "scraper.page.queue"
     end
 ```
 
-#### Description
-
-1. **Scraper listens for new jobs** from `scraper.page` or `scraper.subpage`.
-2. **Checks Redis cache** to see if the URL has already been crawled.
-   - If **cached**, the scraper **skips processing** and acknowledges the job.
-   - If **not cached**, the scraper **fetches and renders the page**.
-3. **Extracts all subpages** (e.g., pagination, menu categories).
-4. **Creates new subpage jobs** (`scraper.subpage`) in RabbitMQ for other scrapers to process.
-5. **Caches the page content** to avoid redundant crawling.
-6. **Sends the final HTML result to `scraper.results`** for backend processing.
-
----
-
-### Backend Processing (Extract, Store, Persist)
-
-This sequence diagram shows how the backend **processes scraper results**, analyzes content, extracts relevant data, and persists information.
+### Backend Processing
 
 ```mermaid
 sequenceDiagram
     participant RabbitMQ
     participant Backend
-    participant Analyzer
     participant Extractor
-    participant Mapper
     participant Database
-    participant Filesystem
+    participant Storage (Docker Volume)
 
-    RabbitMQ->>Backend: Receive `scraper.results` event
-    Backend->>Analyzer: Analyze HTML content
-    alt Content is file (PDF/Image)
-        Backend->>Filesystem: Store file
+    RabbitMQ->>Backend: Receive extracted data
+    Backend->>Extractor: Process extracted content
+    alt Content is a file (PDF/Image)
+        Scraper->>Storage (Docker Volume): Save file
+        Backend->>Storage (Docker Volume): Read file
     else Content is structured (HTML/API)
-        Backend->>Extractor: Extract menu data
-        Extractor->>Mapper: Map extracted data to JSON
-        Mapper->>Database: Store structured data
+        Backend->>Database: Store structured data
     end
 ```
-
-#### Description
-
-1. **Backend listens for results** from `scraper.results`.
-2. **Analyzer determines the content type**:
-   - If the content is a **file (PDF/Image)**, it is **stored in the filesystem**.
-   - If the content is **structured data (HTML/API)**, it goes through further extraction.
-3. **Extractor processes the structured content**, identifying relevant menu information.
-4. **Mapper transforms the extracted data into a standardized JSON format**.
-5. **The mapped data is persisted in the database** for retrieval and further processing.
