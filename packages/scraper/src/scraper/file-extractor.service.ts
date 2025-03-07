@@ -71,29 +71,39 @@ export class FileExtractorService {
       return;
     }
     for (const link of this.rawLinks) {
-      const fileUrl = new URL(link);
+      const fileUrl = new URL(link, page.url());
+
+      const response = await page.goto(fileUrl.href);
+      if (!response) {
+        this.logger.log(`Skipping non-response file: ${fileUrl.href}`);
+        continue;
+      }
+
+      const isPdfContentType = response
+        .headers()
+        ['content-type']?.includes('application/pdf');
+      if (fileUrl.pathname.toLowerCase().includes('.pdf') || isPdfContentType) {
+        this.fileResponses.set(fileUrl.href, { url: fileUrl, response });
+        continue;
+      }
 
       const isInvalidFiles =
         this.isIgnoredDomain(fileUrl) || !this.containsMenuKeywords(fileUrl);
       if (isInvalidFiles) {
-        console.log(`Skipping non-menu file: ${fileUrl.href}`);
+        this.logger.log(`Skipping non-menu file: ${fileUrl.href}`);
         continue;
       }
-      const response = await page.goto(fileUrl.href);
-      if (!response) {
-        console.log(`Skipping non-response file: ${fileUrl.href}`);
-        continue;
-      }
+
       const isMatchingImageSpecs = await this.isMatchingImageSpecs(
         fileUrl,
         response,
       );
       if (!isMatchingImageSpecs) {
-        console.log(`Skipping non-image file: ${fileUrl.href}`);
+        this.logger.log(`Skipping non-image file: ${fileUrl.href}`);
         continue;
       }
 
-      this.fileResponses.set(fileUrl, response);
+      this.fileResponses.set(fileUrl.href, { url: fileUrl, response });
     }
   }
 
