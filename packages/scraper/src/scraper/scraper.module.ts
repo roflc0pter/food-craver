@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { BrowserModule } from '../browser/browser.module';
-import { ApiExtractorService } from './api-extractor.service';
 import { FileExtractorService } from './file-extractor.service';
 import { HtmlExtractorService } from './html-extractor.service';
 import { LinkExtractorService } from './link-extractor.service';
@@ -14,7 +13,6 @@ import { ScraperService } from './scraper.service';
     ScraperService,
     HtmlExtractorService,
     LinkExtractorService,
-    ApiExtractorService,
     FileExtractorService,
   ],
 })

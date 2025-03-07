@@ -42,4 +42,4 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 COPY --from=builder /app/dist ./dist
 COPY --from=deps /app/node_modules ./node_modules
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/main.js"]
