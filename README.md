@@ -40,30 +40,43 @@ For simply running the **production environment**, only Docker and Docker Compos
 Additionally, create a `.env` file in the root directory with the following example variables:
 
 ```ini
+UPLOADS_MOUNT_DIR=/app/uploads
+
 BACKEND_IMAGE=food-craver-backend
 BACKEND_DIR=packages/backend
-BACKEND_PORT=3000
+BACKEND_EX_PORT=3000
 
 SCRAPER_IMAGE=food-craver-scraper
 SCRAPER_DIR=packages/scraper
+SCRAPER_PAGE_INSTANCE_QUEUES=page
+SCRAPER_SUBPAGE_INSTANCE_QUEUES=page,subpage
+SCRAPER_SUBPAGE_INSTANCE_QUEUES=page,subpage
+SCRAPER_BROKER_URL=amqp://message-broker:5672
+SCRAPER_QUEUE=scraper.page
 
 BROKER_IMAGE=food-craver-message-broker
 BROKER_DIR=packages/message-broker
 BROKER_AMQP_PORT=5672
+BROKER_AMQP_EX_PORT=5672
 BROKER_UI_PORT=15672
+BROKER_UI_EX_PORT=15672
 BROKER_USER=food_craver_user
 BROKER_PASSWORD=password
 
 DB_IMAGE=food-craver-database
 DB_DIR=packages/database
-DB_PORT=5555
+DB_HOST=database
+DB_EX_PORT=5555
+DB_PORT=5432
 DB_NAME=food_craver
 DB_USER=food_craver_user
 DB_PASSWORD=password
 
 CACHE_IMAGE=food-craver-cache
 CACHE_DIR=packages/cache
+REDIS_HOST=cache
 CACHE_PORT=6379
+CACHE_EX_PORT=6379
 ```
 
 ---
