@@ -2,8 +2,6 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import store from 'cache-manager-redis-store';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { BrowserModule } from './browser/browser.module';
 import { ScraperModule } from './scraper/scraper.module';
 
@@ -28,7 +26,5 @@ const CACHE_TTL = 2592000; // 30 days
     BrowserModule,
     ScraperModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

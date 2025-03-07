@@ -5,8 +5,7 @@ import { Page } from 'puppeteer';
 export class LinkExtractorService {
   async extractLinks(page: Page, baseUrl: string): Promise<string[]> {
     const rawLinks = await this.getRawLinks(page);
-    const bla = this.filterValidLinks(rawLinks, baseUrl);
-    return bla;
+    return this.filterValidLinks(rawLinks, baseUrl);
   }
 
   private async getRawLinks(page: Page) {

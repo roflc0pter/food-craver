@@ -12,15 +12,19 @@ import { FileExtractorService } from './file-extractor.service';
 import { HtmlExtractorService } from './html-extractor.service';
 import { LinkExtractorService } from './link-extractor.service';
 import {
-  CachedScrapingDto,
+  C_KEYS,
+  ScraperCachedJobDto,
+  ScraperCachedLinkDto,
   ScraperJobDto,
-  ScrapingResultDto,
+  ScraperResultDto,
 } from './scraper.dto';
 
 @Injectable()
 export class ScraperService {
   private readonly logger = new Logger(ScraperService.name);
   private readonly scraperPageQueue: ClientProxy;
+  private readonly backendPageQueue: ClientProxy;
+  private readonly maxAttempts = 3;
 
   constructor(
     private readonly browserService: BrowserService,
@@ -43,44 +47,80 @@ export class ScraperService {
         queueOptions: { durable: true },
       },
     });
+
+    this.backendPageQueue = ClientProxyFactory.create({
+      transport: Transport.RMQ,
+      options: {
+        urls: [`amqp://${user}:${pw}@${host}:${port}`],
+        queue: 'backend.page.queue',
+        queueOptions: { durable: true },
+      },
+    });
   }
 
   async extractMenu(payload: ScraperJobDto) {
-    this.logger.debug(`Starting extraction for URL: ${payload.url}`);
-    await this.browserService.launchBrowser();
-    const page = await this.browserService.goto(payload.url);
-    const hostname = new URL(payload.url).hostname;
-
-    const cachedResult = await this.cacheManager.get<CachedScrapingDto>(
-      `scraper:${hostname}`,
-    );
-
-    let result: ScrapingResultDto | null = null;
-    if (cachedResult) {
+    try {
       this.logger.debug(
-        `Using cached method: ${cachedResult.method} for ${hostname}`,
+        `Job ID: ${payload.jobId} URL: ${payload.url} - Starting extraction`,
       );
-      result = await this.executeExtractionMethod(
-        page,
-        payload,
-        cachedResult.method,
-        cachedResult.resource,
-      );
-    } else {
-      result = await this.runExtractionPipeline(page, payload);
-    }
+      await this.browserService.launchBrowser();
+      const page = await this.browserService.page();
+      await page.setExtraHTTPHeaders({ 'Accept-Ranges': 'none' });
+      await page.goto(payload.url, { waitUntil: ['load', 'networkidle0'] });
+      const hostname = new URL(payload.url).hostname;
 
-    await this.cacheManager.set(`scraper:${payload.url}`, {
-      status: 'scraped',
-    });
-    await this.handleExtractedLinks(page, payload);
-    return result;
+      const cachedJob = await this.cacheManager.get<ScraperCachedJobDto>(
+        `${C_KEYS.JOB}:${hostname}`,
+      );
+
+      let result: ScraperResultDto | null = null;
+      if (cachedJob) {
+        this.logger.debug(
+          `Using cached method: ${cachedJob.method} for ${hostname}`,
+        );
+        result = await this.executeExtractionMethod(
+          page,
+          payload,
+          cachedJob.method,
+          cachedJob.resource,
+        );
+      } else {
+        result = await this.runExtractionPipeline(page, payload);
+      }
+
+      await this.cacheManager.set<ScraperCachedLinkDto>(
+        `${C_KEYS.LINK}:${payload.url}`,
+        {
+          status: 'processed',
+        },
+      );
+      await this.handleExtractedLinks(page, payload);
+
+      this.backendPageQueue.emit('page.processed', result);
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Job ID: ${payload.jobId} URL: ${payload.url} - Extraction failed`,
+        error,
+      );
+      await this.cacheManager.set<ScraperCachedLinkDto>(
+        `${C_KEYS.LINK}:${payload.url}`,
+        {
+          status: 'failed',
+        },
+      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.backendPageQueue.emit('page.failed', errorMessage);
+
+      return errorMessage;
+    }
   }
 
   private async runExtractionPipeline(
     page: Page,
     payload: ScraperJobDto,
-  ): Promise<ScrapingResultDto | null> {
+  ): Promise<ScraperResultDto | null> {
     const extractionMethods = [
       'apiExtractor',
       'htmlExtractor',
@@ -102,7 +142,7 @@ export class ScraperService {
     payload: ScraperJobDto,
     method: string,
     resource?: string,
-  ): Promise<ScrapingResultDto | null> {
+  ): Promise<ScraperResultDto | null> {
     switch (method) {
       case 'apiExtractor':
         return this.handleApiExtraction(payload);
@@ -115,10 +155,10 @@ export class ScraperService {
     }
   }
 
-  private handleApiExtraction(
-    payload: ScraperJobDto,
-  ): ScrapingResultDto | null {
-    this.logger.debug(`Attempting api extraction for ${payload.url}`);
+  private handleApiExtraction(payload: ScraperJobDto): ScraperResultDto | null {
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - Attempting api extraction`,
+    );
     return null;
   }
 
@@ -126,16 +166,22 @@ export class ScraperService {
     page: Page,
     payload: ScraperJobDto,
     resource?: string,
-  ): Promise<ScrapingResultDto | null> {
-    this.logger.debug(`Attempting html extraction for ${payload.url}`);
+  ): Promise<ScraperResultDto | null> {
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - Attempting html extraction`,
+    );
     const hostname = new URL(payload.url).hostname;
     const selector = resource || (await this.htmlExtractor.getSelector(page));
 
     if (!selector) {
-      this.logger.debug(`No HTML selector found. ${payload.url}`);
+      this.logger.debug(
+        `Job ID: ${payload.jobId} URL: ${payload.url} - No HTML selector found`,
+      );
       return null;
     }
-    this.logger.debug(`HTML selector found. ${payload.url}`);
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - HTML selector found`,
+    );
 
     const data = await this.htmlExtractor.extractData(page, selector);
 
@@ -143,23 +189,37 @@ export class ScraperService {
       method: 'htmlExtractor',
       resource: selector,
     });
-    this.logger.debug(`HTML data extracted. ${payload.url}`);
-    return { method: 'htmlExtractor', data };
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - HTML data extracted`,
+    );
+    return { method: 'htmlExtractor', data, jobId: payload.jobId };
   }
 
   private async handleFileExtraction(
     page: Page,
     payload: ScraperJobDto,
-  ): Promise<ScrapingResultDto | null> {
-    this.logger.debug(`Attempting file extraction for ${payload.url}`);
+  ): Promise<ScraperResultDto | null> {
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - Attempting file extraction`,
+    );
 
-    const fileResponses = await this.fileExtractor.extractFiles(page);
+    const fileResponses = await this.fileExtractor
+      .extractFiles(page)
+      .catch((error) => {
+        this.logger.error(error);
+        throw error;
+      });
 
     if (!fileResponses) {
-      this.logger.debug(`No files found. ${payload.url}`);
+      this.logger.debug(
+        `Job ID: ${payload.jobId} URL: ${payload.url} - No files found`,
+      );
       return null;
     }
-    this.logger.debug(`File extraction successful for ${payload.url}`);
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - File found`,
+    );
+    this.logger.debug(fileResponses.keys());
 
     await this.fileExtractor.saveFiles();
     const savedFileNames = this.fileExtractor.getSavedFileNames();
@@ -168,27 +228,54 @@ export class ScraperService {
       method: 'fileExtractor',
     });
 
-    return { method: 'fileExtractor', data: savedFileNames };
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - File extraction successful`,
+    );
+    return {
+      method: 'fileExtractor',
+      data: savedFileNames,
+      jobId: payload.jobId,
+    };
   }
 
   private async handleExtractedLinks(page: Page, payload: ScraperJobDto) {
-    this.logger.debug(`Extracting links from ${payload.url}`);
+    this.logger.debug(
+      `Job ID: ${payload.jobId} URL: ${payload.url} - Extracting links`,
+    );
     const links = await this.linkExtractor.extractLinks(page, payload.url);
     if (links.length === 0) {
-      this.logger.debug(`No links found on ${payload.url}`);
+      this.logger.debug(
+        `Job ID: ${payload.jobId} URL: ${payload.url} - No links found`,
+      );
       return;
     }
 
     for (const link of links) {
-      const cacheKey = `scraper:${link}`;
-      const isCached = await this.cacheManager.get(cacheKey);
-      if (isCached) {
-        this.logger.debug(`Skipping cached link: ${link}`);
-        return;
+      const cachedLinkKey = `${C_KEYS.LINK}:${link}`;
+      const cachedLink =
+        await this.cacheManager.get<ScraperCachedLinkDto>(cachedLinkKey);
+
+      // Skip if already queued or processed
+      if (cachedLink && ['queued', 'processed'].includes(cachedLink.status)) {
+        this.logger.debug(`Skipping already queued/processed link: ${link}`);
+        continue;
       }
 
-      this.logger.log(`Emitting subpage event for ${link}`);
-      await this.cacheManager.set(cacheKey, { status: 'queued' });
+      // If failed but attempts are still allowed, retry
+      const attempts = cachedLink?.attempts ? cachedLink.attempts + 1 : 1;
+      if (cachedLink?.status === 'failed' && attempts > this.maxAttempts) {
+        this.logger.debug(
+          `Skipping failed link with max attempts reached: ${link}`,
+        );
+        continue;
+      }
+
+      this.logger.log(`Emitting subpage. ${link}`);
+      await this.cacheManager.set<ScraperCachedLinkDto>(cachedLinkKey, {
+        status: 'queued',
+        attempts,
+      });
+
       this.scraperPageQueue.emit('page.added', {
         url: link,
         type: 'subpage',
