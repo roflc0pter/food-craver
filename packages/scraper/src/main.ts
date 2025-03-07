@@ -4,11 +4,14 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const host = process.env.RABBITMQ_HOST!;
-  const port = process.env.RABBITMQ_PORT!;
-  const user = process.env.RABBITMQ_USER!;
-  const pw = process.env.RABBITMQ_PW!;
-  const queue = process.env.RABBITMQ_QUEUE!;
+  const host = process.env.RABBITMQ_HOST;
+  const port = process.env.RABBITMQ_PORT;
+  const user = process.env.RABBITMQ_USER;
+  const pw = process.env.RABBITMQ_PW;
+  const queue = process.env.RABBITMQ_QUEUE;
+  if (!host || !port || !user || !pw || !queue) {
+    throw new Error('Missing rabbitmq config');
+  }
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     AppModule,
     {
