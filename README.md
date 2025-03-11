@@ -92,7 +92,7 @@ For simply running the **production environment**, only Docker and Docker Compos
 To run the project in **production mode**, use **Docker Compose**:
 
 ```sh
-docker-compose up
+docker compose up
 ```
 
 ## Local Development Setup
