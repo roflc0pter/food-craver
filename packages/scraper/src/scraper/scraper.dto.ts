@@ -18,6 +18,7 @@ export class ScraperResultDto {
   jobId: string;
   data: unknown;
   method: 'htmlExtractor' | 'apiExtractor' | 'fileExtractor';
+  error?: string;
 }
 
 export enum C_KEYS {

@@ -88,6 +88,24 @@ export class ScraperService {
         result = await this.runExtractionPipeline(page, payload);
       }
 
+      if (!result) {
+        const errorMessage = 'No extraction method succeeded';
+        await this.cacheManager.set<ScraperCachedLinkDto>(
+          `${C_KEYS.LINK}:${payload.url}`,
+          {
+            status: 'failed',
+          },
+        );
+        const failPayload: ScraperResultDto = {
+          jobId: payload.jobId,
+          method: 'fileExtractor',
+          data: [],
+          error: errorMessage,
+        };
+        this.backendPageQueue.emit('page.failed', failPayload);
+        return failPayload;
+      }
+
       await this.cacheManager.set<ScraperCachedLinkDto>(
         `${C_KEYS.LINK}:${payload.url}`,
         {
@@ -111,9 +129,15 @@ export class ScraperService {
       );
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      this.backendPageQueue.emit('page.failed', errorMessage);
+      const failPayload: ScraperResultDto = {
+        jobId: payload.jobId,
+        method: 'fileExtractor',
+        data: [],
+        error: errorMessage,
+      };
+      this.backendPageQueue.emit('page.failed', failPayload);
 
-      return errorMessage;
+      return failPayload;
     }
   }
 
